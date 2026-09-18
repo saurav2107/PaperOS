@@ -421,12 +421,10 @@ PaperOS is a unified implementation, but its apps were informed by these project
 | --- | --- |
 | [Boisti13/papers3-dashboard](https://github.com/Boisti13/papers3-dashboard) | Dashboard, Home Assistant and power-management reference |
 | [squirmen/PaperS3Weather](https://github.com/squirmen/PaperS3Weather) | Weather data and e-paper presentation reference |
-| [micokonsep/pomodoro-papers3](https://github.com/micokonsep/pomodoro-papers3) | Focus timer behavior and layout reference |
 | [juicecultus/EPub-M5Stack-Paper-S3](https://github.com/juicecultus/EPub-M5Stack-Paper-S3/tree/experimental) | Earlier EPUB parsing/pagination reference |
 | [juicecultus/crosspoint-reader-papers3](https://github.com/juicecultus/crosspoint-reader-papers3) | EPUB architecture, spine, cache and reader-experience reference |
 | [omeriko9/M5Paper_PaperS3_eBookReader](https://github.com/omeriko9/M5Paper_PaperS3_eBookReader) | Reader behavior and format research |
 | [arunmathaisk/PaperS3-chess](https://github.com/arunmathaisk/PaperS3-chess) | Chess layout, initial turn flow and optional PNG pieces |
 
-See [source provenance and retained notices](docs/THIRD_PARTY.md) and the app `PORTING.md` files for detail. The standalone clones were removed; no `third_party` folder is needed to build. Third-party copyrights remain with their owners.
 
 PaperOS is released under the root [MIT License](LICENSE), copyright © 2026 Saurav Singh.
