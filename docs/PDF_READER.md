@@ -53,4 +53,4 @@ Each page is rendered as a 540 x 780 PNG, which fits between Paper OS's shared
 header and footer. The PDF reader keeps only the current PNG in the normal
 display decoding path; it does not load the entire document into RAM.
 
-Use `PREV` and `NEXT` to turn pages and `HOME` to leave the reader.
+Use `PREV` and `NEXT` to turn pages and `CLOSE` to return to the Library.

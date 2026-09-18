@@ -58,7 +58,7 @@ Paper OS/
 │   │   └── time/                  RTC/NTP synchronization
 │   ├── services/                  service composition only
 │   └── ui/                        common visual components
-├── third_party/                   pinned external source, if adopted
+├── assets/                        retained optional assets and licenses
 └── docs/                          maintainer documentation
 ```
 
@@ -533,7 +533,8 @@ display and PSRAM behavior can change between versions.
 
 ### Updating a third-party app port
 
-Keep the upstream source as a submodule or a pinned commit under `third_party/`.
+Record upstream provenance in `docs/THIRD_PARTY.md`; keep only required assets
+and license notices under `assets/`. Unused standalone clones have been removed.
 Do not overwrite local integration code. Diff the upstream change, then port
 only the relevant change into the adapter/module. Update `PORTING.md` with the
 new revision and behavior change.
