@@ -1,0 +1,111 @@
+#pragma once
+#include "app/IApp.h"
+
+using NavigationCallback = void (*)(AppId);
+
+class LauncherApp final : public IApp {
+ public:
+  void setNavigator(NavigationCallback navigator) { navigator_ = navigator; }
+  AppId id() const override { return AppId::Launcher; }
+  const char* title() const override { return "Launcher"; }
+  bool onStart(AppContext&) override;
+  void onTick(AppContext&, uint32_t) override;
+  void onStop(AppContext&) override;
+ private:
+  void draw(AppContext& context);
+  NavigationCallback navigator_{nullptr};
+  uint32_t lastClockDrawMs_{0};
+};
+
+class StatusApp : public IApp {
+ public:
+  StatusApp(AppId id, const char* title, const char* description)
+      : id_(id), title_(title), description_(description) {}
+  AppId id() const override { return id_; }
+  const char* title() const override { return title_; }
+  void setNavigator(NavigationCallback navigator) { navigator_ = navigator; }
+  bool onStart(AppContext&) override;
+  void onTick(AppContext&, uint32_t) override;
+  void onStop(AppContext&) override;
+ protected:
+  AppId id_;
+  const char* title_;
+  const char* description_;
+  uint32_t lastDrawMs_{0};
+  NavigationCallback navigator_{nullptr};
+};
+
+class ClockApp final : public StatusApp { public: ClockApp() : StatusApp(AppId::Clock, "Clock", "RTC and NTP-backed clock") {} };
+class CalendarApp final : public StatusApp { public: CalendarApp() : StatusApp(AppId::Calendar, "Calendar", "Home Assistant calendar adapter") {} };
+class ImageViewerApp final : public StatusApp { public: ImageViewerApp() : StatusApp(AppId::Images, "Image Viewer", "Browse images from microSD") {} };
+class EpubApp final : public StatusApp { public: EpubApp() : StatusApp(AppId::Reader, "eReader", "EPub parser and renderer adapter") {} };
+class DashboardApp final : public StatusApp { public: DashboardApp() : StatusApp(AppId::Dashboard, "Home Dashboard", "LVGL / MQTT / Home Assistant adapter") {} };
+class WeatherApp final : public StatusApp { public: WeatherApp() : StatusApp(AppId::Weather, "Weather", "Open-Meteo client for Noida") {} };
+class PomodoroApp final : public IApp {
+ public:
+  void setNavigator(NavigationCallback navigator) { navigator_ = navigator; }
+  AppId id() const override { return AppId::Pomodoro; }
+  const char* title() const override { return "Pomodoro"; }
+  bool onStart(AppContext&) override;
+  void onTick(AppContext&, uint32_t) override;
+  void onStop(AppContext&) override;
+ private:
+  void draw(AppContext&, bool fullRefresh = false);
+  void drawTimer();
+  void drawButtons();
+  void updateTimer(AppContext&, uint32_t nowMs);
+  void handleTap(AppContext&, int x, int y);
+  void start();
+  void stop();
+  void pause();
+  void selectDuration(uint8_t minutes);
+  void refresh(AppContext&);
+  NavigationCallback navigator_{nullptr};
+  uint16_t durationMinutes_{25};
+  uint16_t elapsedSeconds_{0};
+  uint32_t lastSecondMs_{0};
+  uint32_t lastActivityMs_{0};
+  bool running_{false};
+  bool paused_{false};
+  bool locked_{false};
+};
+class NotesApp final : public IApp {
+ public:
+  void setNavigator(NavigationCallback navigator) { navigator_ = navigator; }
+  AppId id() const override { return AppId::Notes; }
+  const char* title() const override { return "Notes"; }
+  bool onStart(AppContext&) override;
+  void onTick(AppContext&, uint32_t) override;
+  void onStop(AppContext&) override {}
+ private:
+  void draw(AppContext& context);
+  void append(char value);
+  void save(AppContext& context);
+  NavigationCallback navigator_{nullptr};
+  String text_;
+  String status_;
+};
+class TasksApp final : public StatusApp { public: TasksApp() : StatusApp(AppId::Tasks, "Tasks", "Future feature: task list") {} };
+class MusicApp final : public StatusApp { public: MusicApp() : StatusApp(AppId::Music, "Music", "Future feature: media controls") {} };
+class HabitsApp final : public StatusApp { public: HabitsApp() : StatusApp(AppId::Habits, "Habits", "Future feature: habit tracker") {} };
+class CalculatorApp final : public StatusApp { public: CalculatorApp() : StatusApp(AppId::Calculator, "Calculator", "Future feature: calculator") {} };
+class FilesApp final : public StatusApp { public: FilesApp() : StatusApp(AppId::Files, "Files", "Future feature: file browser") {} };
+class RssApp final : public StatusApp { public: RssApp() : StatusApp(AppId::Rss, "RSS", "Future feature: feed reader") {} };
+class SensorsApp final : public StatusApp { public: SensorsApp() : StatusApp(AppId::Sensors, "Sensors", "Future feature: sensor dashboard") {} };
+class TerminalApp final : public StatusApp { public: TerminalApp() : StatusApp(AppId::Terminal, "Terminal", "Future feature: device console") {} };
+class SystemMonitorApp final : public StatusApp { public: SystemMonitorApp() : StatusApp(AppId::SystemMonitor, "System", "Future feature: system monitor") {} };
+
+class SettingsApp final : public IApp {
+ public:
+  void setNavigator(NavigationCallback navigator) { navigator_ = navigator; }
+  AppId id() const override { return AppId::Settings; }
+  const char* title() const override { return "Settings"; }
+  bool onStart(AppContext&) override;
+  void onTick(AppContext&, uint32_t) override;
+  void onStop(AppContext&) override {}
+ private:
+  void draw(AppContext& context);
+  NavigationCallback navigator_{nullptr};
+  uint8_t fontScale_{1};
+  bool lowGhosting_{true};
+};

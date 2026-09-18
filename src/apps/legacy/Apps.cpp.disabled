@@ -1,0 +1,346 @@
+#include "apps/Apps.h"
+#include <math.h>
+#include <Preferences.h>
+#include <SD.h>
+#include <M5Unified.h>
+#include "app/AppContext.h"
+#include "services/Services.h"
+#include "config/Location.h"
+
+namespace {
+constexpr int kW = 540, kH = 960, kTop = 132, kTileW = 162, kTileH = 150, kGap = 11;
+struct Tile { AppId app; const char* label; };
+constexpr Tile kTiles[] = {
+ {AppId::Dashboard,"Home"},{AppId::Weather,"Weather"},{AppId::Clock,"Clock"},
+ {AppId::Calendar,"Calendar"},{AppId::Reader,"eReader"},{AppId::Images,"Photos"},
+ {AppId::Pomodoro,"Focus"},{AppId::Notes,"Notes"},{AppId::Calculator,"Calculator"},
+ {AppId::Files,"Files"},{AppId::SystemMonitor,"System"},{AppId::Settings,"Settings"},
+};
+
+String savedAddress() {
+  Preferences p; p.begin("paperos", true);
+  String address = p.getString("address", kHomeLocation.label); p.end(); return address;
+}
+void textCenter(const char* text, int x, int y, uint8_t size = 1) {
+  M5.Display.setTextSize(size); M5.Display.drawString(text, x - M5.Display.textWidth(text) / 2, y);
+}
+void battery(int x, int y, uint8_t level, bool charging) {
+  M5.Display.drawRoundRect(x, y, 43, 20, 3, TFT_BLACK); M5.Display.fillRect(x + 43, y + 6, 3, 8, TFT_BLACK);
+  int width = (37 * level) / 100; if (width) M5.Display.fillRect(x + 3, y + 3, width, 14, TFT_BLACK);
+  M5.Display.setTextSize(1); M5.Display.setCursor(x - 34, y + 4); M5.Display.printf("%u%%", level);
+  if (charging) { M5.Display.setCursor(x + 17, y + 2); M5.Display.print("+"); }
+}
+void wifiBars(int x, int y, bool online) {
+  for (int i = 0; i < 4; ++i) {
+    int h = 5 + i * 4; int bx = x + i * 7;
+    if (online || i == 0) M5.Display.fillRect(bx, y + 18 - h, 4, h, TFT_BLACK);
+    else M5.Display.drawRect(bx, y + 18 - h, 4, h, TFT_BLACK);
+  }
+}
+void compactTopBar(AppContext& c, const char* title, bool back) {
+  M5.Display.fillRect(0, 0, kW, 68, TFT_WHITE); M5.Display.drawFastHLine(0, 67, kW, TFT_BLACK);
+  M5.Display.setTextSize(1);
+  if (back) { M5.Display.drawRoundRect(12, 15, 76, 36, 7, TFT_BLACK); M5.Display.setCursor(25, 27); M5.Display.print("< Back"); }
+  M5.Display.setCursor(back ? 104 : 20, 25); M5.Display.setTextSize(2); M5.Display.print(title);
+  M5.Display.setTextSize(1); M5.Display.setCursor(316, 26); M5.Display.print(c.time.formattedLocalTime());
+  wifiBars(402, 23, c.network.connected());
+  battery(476, 20, c.power.batteryPercent(), M5.Power.isCharging() == m5::Power_Class::is_charging);
+}
+void icon(AppId id, int cx, int cy) {
+  if (id == AppId::Clock || id == AppId::Pomodoro) { M5.Display.drawCircle(cx, cy, 18, TFT_BLACK); M5.Display.drawLine(cx,cy,cx,cy-11,TFT_BLACK); M5.Display.drawLine(cx,cy,cx+9,cy+4,TFT_BLACK); }
+  else if (id == AppId::Weather) { M5.Display.drawCircle(cx-8,cy-3,12,TFT_BLACK); M5.Display.drawLine(cx-25,cy+17,cx+25,cy+17,TFT_BLACK); M5.Display.drawLine(cx-18,cy+25,cx+18,cy+25,TFT_BLACK); }
+  else if (id == AppId::Settings) { M5.Display.drawCircle(cx,cy,17,TFT_BLACK); M5.Display.fillCircle(cx,cy,5,TFT_BLACK); for(int i=0;i<8;i++){float a=i*.785f;M5.Display.drawLine(cx+cosf(a)*20,cy+sinf(a)*20,cx+cosf(a)*26,cy+sinf(a)*26,TFT_BLACK);} }
+  else if (id == AppId::Reader) { M5.Display.drawRect(cx-23,cy-17,20,35,TFT_BLACK); M5.Display.drawRect(cx+3,cy-17,20,35,TFT_BLACK); M5.Display.drawLine(cx,cy-17,cx,cy+18,TFT_BLACK); }
+  else { M5.Display.drawRoundRect(cx-23,cy-16,46,32,5,TFT_BLACK); M5.Display.drawCircle(cx-9,cy-2,4,TFT_BLACK); M5.Display.drawLine(cx-20,cy+13,cx-1,cy,TFT_BLACK); M5.Display.drawLine(cx-1,cy,cx+14,cy+12,TFT_BLACK); }
+}
+} // namespace
+
+bool LauncherApp::onStart(AppContext& c) { draw(c); lastClockDrawMs_ = millis(); return true; }
+void LauncherApp::draw(AppContext& c) {
+  M5.Display.clear(); M5.Display.setTextColor(TFT_BLACK, TFT_WHITE);
+  M5.Display.drawRoundRect(18, 16, 504, 94, 14, TFT_BLACK); M5.Display.setCursor(36, 31); M5.Display.setTextSize(2); M5.Display.print("Paper OS");
+  M5.Display.setCursor(36, 66); M5.Display.setTextSize(1); M5.Display.print(savedAddress());
+  M5.Display.setCursor(36, 89); M5.Display.print(c.time.formattedLocalTime());
+  wifiBars(402, 34, c.network.connected()); battery(476, 31, c.power.batteryPercent(), M5.Power.isCharging() == m5::Power_Class::is_charging);
+  M5.Display.setCursor(384, 72); M5.Display.printf("Wi-Fi %s", c.network.connected()?"online":"offline");
+  M5.Display.setCursor(18, 118); M5.Display.setTextSize(1); M5.Display.print("APP DRAWER");
+  for (size_t i=0;i<sizeof(kTiles)/sizeof(kTiles[0]);++i) {
+    int row=i/3, col=i%3, x=16+col*(kTileW+kGap), y=kTop+12+row*(kTileH+kGap);
+    M5.Display.drawRoundRect(x,y,kTileW,kTileH,14,TFT_BLACK); M5.Display.drawRoundRect(x+4,y+4,kTileW-8,kTileH-8,10,TFT_BLACK);
+    icon(kTiles[i].app,x+kTileW/2,y+38); textCenter(kTiles[i].label,x+kTileW/2,y+94,1);
+  }
+}
+void LauncherApp::onTick(AppContext& c, uint32_t now) {
+  const auto& t=M5.Touch.getDetail();
+  if (t.wasPressed()) for(size_t i=0;i<sizeof(kTiles)/sizeof(kTiles[0]);++i) { int row=i/3,col=i%3,x=16+col*(kTileW+kGap),y=kTop+12+row*(kTileH+kGap); if(t.x>=x&&t.x<=x+kTileW&&t.y>=y&&t.y<=y+kTileH&&navigator_){navigator_(kTiles[i].app);return;} }
+  if(now-lastClockDrawMs_>=60000){draw(c);lastClockDrawMs_=now;}
+}
+void LauncherApp::onStop(AppContext&) {}
+
+bool StatusApp::onStart(AppContext& c) { lastDrawMs_ = millis() - 60000UL; onTick(c,millis()); return true; }
+void StatusApp::onTick(AppContext& c,uint32_t now) {
+  const auto& t=M5.Touch.getDetail(); if(t.wasPressed()&&t.x<95&&t.y<68&&navigator_){navigator_(AppId::Launcher);return;}
+  if(now-lastDrawMs_<60000)return; lastDrawMs_=now; M5.Display.clear(); compactTopBar(c,title_,true); M5.Display.setCursor(26,104);M5.Display.setTextSize(2);M5.Display.println(description_);M5.Display.setTextSize(1);M5.Display.setCursor(26,160);M5.Display.printf("%s\nWi-Fi: %s\nBattery: %u%%\nSD: %s",c.time.formattedLocalTime(),c.network.connected()?"connected":"offline",c.power.batteryPercent(),c.storage.mounted()?"mounted":"not mounted");
+}
+void StatusApp::onStop(AppContext&) {}
+
+bool PomodoroApp::onStart(AppContext& context) {
+  durationMinutes_ = 25;
+  elapsedSeconds_ = 0;
+  running_ = false;
+  paused_ = false;
+  locked_ = false;
+  lastSecondMs_ = millis();
+  lastActivityMs_ = millis();
+  M5.Speaker.setVolume(200);
+  draw(context, true);
+  return true;
+}
+
+void PomodoroApp::drawTimer() {
+  constexpr int cx = 270, cy = 342, outer = 205, inner = 158;
+  const uint16_t completeMinutes = elapsedSeconds_ / 60;
+  const uint8_t completeSeconds = elapsedSeconds_ % 60;
+  for (int i = 0; i < 60; ++i) {
+    const float a = (i * 6 - 90) * PI / 180.0f;
+    const int x = cx + outer * cosf(a), y = cy + outer * sinf(a);
+    M5.Display.fillCircle(x, y, 4, i < completeSeconds ? TFT_WHITE : TFT_BLACK);
+  }
+  for (int i = 0; i < durationMinutes_; ++i) {
+    const float a = (i * (360.0f / durationMinutes_) - 90) * PI / 180.0f;
+    const int x = cx + inner * cosf(a), y = cy + inner * sinf(a);
+    M5.Display.fillCircle(x, y, 6, i < completeMinutes ? TFT_WHITE : TFT_BLACK);
+  }
+  const uint32_t remaining = durationMinutes_ * 60UL - elapsedSeconds_;
+  char timeText[8];
+  snprintf(timeText, sizeof(timeText), "%02lu:%02lu", remaining / 60, remaining % 60);
+  M5.Display.fillRoundRect(135, 285, 270, 110, 12, TFT_WHITE);
+  M5.Display.setTextColor(TFT_BLACK, TFT_WHITE);
+  M5.Display.setTextDatum(MC_DATUM);
+  M5.Display.setTextSize(6);
+  M5.Display.drawString(timeText, cx, cy - 17);
+  M5.Display.setTextSize(2);
+  M5.Display.drawString(running_ ? (paused_ ? "PAUSED" : "RUNNING") : "READY", cx, cy + 40);
+  M5.Display.setTextDatum(TL_DATUM);
+}
+
+void PomodoroApp::drawButtons() {
+  const int y1 = 620, y2 = 706;
+  const int xs[] = {78, 210, 342};
+  const char* commands[] = {"PLAY", "PAUSE", "STOP"};
+  for (int i = 0; i < 3; ++i) {
+    M5.Display.drawRoundRect(xs[i], y1, 120, 58, 9, TFT_BLACK);
+    textCenter(commands[i], xs[i] + 60, y1 + 19, 1);
+  }
+  const char* presets[] = {"25 MIN", "5 MIN", "30 MIN"};
+  for (int i = 0; i < 3; ++i) {
+    M5.Display.drawRoundRect(xs[i], y2, 120, 58, 9, TFT_BLACK);
+    textCenter(presets[i], xs[i] + 60, y2 + 19, 1);
+  }
+  M5.Display.drawRoundRect(197, 786, 146, 48, 9, TFT_BLACK);
+  textCenter("REFRESH", 270, 801, 1);
+  M5.Display.setTextSize(1);
+  M5.Display.setCursor(110, 862);
+  M5.Display.print("5-minute anti-ghosting refresh  |  tap Back to return home");
+}
+
+void PomodoroApp::draw(AppContext& context, bool fullRefresh) {
+  if (fullRefresh) M5.Display.fillScreen(TFT_WHITE);
+  compactTopBar(context, "Pomodoro", true);
+  M5.Display.setTextDatum(MC_DATUM);
+  M5.Display.setTextSize(3);
+  M5.Display.drawString("POMODORO", 270, 102);
+  M5.Display.setTextSize(1);
+  M5.Display.drawString("PaperS3 focus timer", 270, 132);
+  M5.Display.setTextDatum(TL_DATUM);
+  drawTimer();
+  drawButtons();
+}
+
+void PomodoroApp::start() {
+  if (!running_) { running_ = true; elapsedSeconds_ = 0; }
+  paused_ = false;
+  lastSecondMs_ = millis();
+  M5.Speaker.tone(800, 100);
+}
+
+void PomodoroApp::stop() {
+  running_ = false;
+  paused_ = false;
+  elapsedSeconds_ = 0;
+  M5.Speaker.tone(400, 100);
+}
+
+void PomodoroApp::pause() {
+  if (running_) { paused_ = true; M5.Speaker.tone(600, 100); }
+}
+
+void PomodoroApp::selectDuration(uint8_t minutes) {
+  durationMinutes_ = minutes;
+  running_ = false;
+  paused_ = false;
+  elapsedSeconds_ = 0;
+}
+
+void PomodoroApp::refresh(AppContext& context) {
+  // The original sketch's black/white refresh sequence, retained for e-paper ghosting cleanup.
+  M5.Display.fillScreen(TFT_BLACK);
+  M5.Display.display();
+  delay(100);
+  M5.Display.fillScreen(TFT_WHITE);
+  M5.Display.display();
+  delay(100);
+  draw(context, true);
+}
+
+void PomodoroApp::handleTap(AppContext& context, int x, int y) {
+  lastActivityMs_ = millis();
+  if (x < 95 && y < 68 && navigator_) { navigator_(AppId::Launcher); return; }
+  if (y >= 620 && y <= 678) {
+    if (x >= 78 && x <= 198) start();
+    else if (x >= 210 && x <= 330) pause();
+    else if (x >= 342 && x <= 462) stop();
+    draw(context, true);
+    return;
+  }
+  if (y >= 706 && y <= 764) {
+    if (x >= 78 && x <= 198) selectDuration(25);
+    else if (x >= 210 && x <= 330) selectDuration(5);
+    else if (x >= 342 && x <= 462) selectDuration(30);
+    draw(context, true);
+    return;
+  }
+  if (x >= 197 && x <= 343 && y >= 786 && y <= 834) refresh(context);
+}
+
+void PomodoroApp::updateTimer(AppContext& context, uint32_t nowMs) {
+  if (!running_ || paused_ || nowMs - lastSecondMs_ < 1000) return;
+  lastSecondMs_ += 1000;
+  ++elapsedSeconds_;
+  if (elapsedSeconds_ >= durationMinutes_ * 60UL) {
+    running_ = false;
+    paused_ = false;
+    elapsedSeconds_ = 0;
+    M5.Speaker.tone(600, 500);
+    draw(context, true);
+    return;
+  }
+  // Preserve the source project's five-minute full refresh policy.
+  if (elapsedSeconds_ % 300 == 0) draw(context, true);
+  else drawTimer();
+}
+
+void PomodoroApp::onTick(AppContext& context, uint32_t nowMs) {
+  const auto& touch = M5.Touch.getDetail();
+  if (locked_) {
+    if (touch.wasPressed()) { locked_ = false; lastActivityMs_ = nowMs; draw(context, true); }
+    return;
+  }
+  if (touch.wasPressed()) handleTap(context, touch.x, touch.y);
+  updateTimer(context, nowMs);
+  // In a modular OS an app must not deep-sleep the whole device. Keep the
+  // original inactivity behavior as an in-app lock screen instead.
+  if (!running_ && nowMs - lastActivityMs_ > 5UL * 60UL * 1000UL) {
+    locked_ = true;
+    M5.Display.fillScreen(TFT_WHITE);
+    if (context.storage.mounted() && SD.exists("/pomodoro/pomodoro.png")) {
+      M5.Display.drawPngFile(SD, "/pomodoro/pomodoro.png", 0, 200);
+    }
+    M5.Display.setTextDatum(MC_DATUM);
+    M5.Display.setTextSize(4);
+    M5.Display.drawString("POMODORO", 270, 430);
+    M5.Display.setTextSize(2);
+    M5.Display.drawString("Sleep mode - tap to resume", 270, 480);
+    M5.Display.setTextDatum(TL_DATUM);
+  }
+}
+
+void PomodoroApp::onStop(AppContext&) {
+  running_ = false;
+  paused_ = false;
+}
+
+bool SettingsApp::onStart(AppContext& c){draw(c);return true;}
+
+void SettingsApp::draw(AppContext& c){
+  M5.Display.clear();compactTopBar(c,"Settings",true); const char* labels[]={"Wi-Fi setup & scan","Home address","Display / contrast","Font size","Refresh / ghosting","System information"};
+  String values[]={c.network.provisioning()?"Setup portal: 192.168.4.1":"Tap to open setup portal",savedAddress(),"E-paper: no backlight",fontScale_==1?"Standard":"Large",lowGhosting_?"Balanced":"Fast","Paper OS v0.1"};
+  for(int i=0;i<6;i++){int y=88+i*128;M5.Display.drawRoundRect(22,y,496,106,12,TFT_BLACK);M5.Display.setTextSize(2);M5.Display.setCursor(42,y+17);M5.Display.print(labels[i]);M5.Display.setTextSize(1);M5.Display.setCursor(42,y+62);M5.Display.print(values[i]);M5.Display.setCursor(490,y+42);M5.Display.print(">");}
+}
+void SettingsApp::onTick(AppContext& c,uint32_t){const auto&t=M5.Touch.getDetail();if(!t.wasPressed())return;if(t.x<95&&t.y<68&&navigator_){navigator_(AppId::Launcher);return;}int row=(t.y-88)/128;if(t.x<22||t.x>518||row<0||row>5)return;if(row==0||row==1)c.network.startProvisioning();if(row==3)fontScale_=fontScale_==1?2:1;if(row==4)lowGhosting_=!lowGhosting_;draw(c);}
+
+bool NotesApp::onStart(AppContext& context) {
+  text_ = "";
+  status_ = context.storage.mounted() ? "New note - type below, then Save" : "Insert/mount an SD card to save notes";
+  draw(context);
+  return true;
+}
+
+void NotesApp::append(char value) {
+  if (text_.length() < 240) text_ += value;
+}
+
+void NotesApp::save(AppContext& context) {
+  if (!context.storage.mounted()) { status_ = "SD card is not mounted"; return; }
+  if (text_.isEmpty()) { status_ = "Write something before saving"; return; }
+  SD.mkdir("/OS");
+  SD.mkdir("/OS/Notes");
+  const String path = "/OS/Notes/note_" + String(millis()) + ".txt";
+  File file = SD.open(path, FILE_WRITE);
+  if (!file) { status_ = "Unable to create note"; return; }
+  file.print(text_);
+  file.close();
+  status_ = "Saved: " + path;
+  text_ = "";
+}
+
+void NotesApp::draw(AppContext& context) {
+  M5.Display.clear();
+  compactTopBar(context, "Notes", true);
+  M5.Display.drawRoundRect(18, 84, 504, 154, 10, TFT_BLACK);
+  M5.Display.setTextSize(1);
+  M5.Display.setCursor(32, 100);
+  M5.Display.print(status_);
+  M5.Display.setTextSize(2);
+  M5.Display.setCursor(32, 135);
+  M5.Display.print(text_);
+  const char* rows[] = {"ABCDEFGHI", "JKLMNOPQR", "STUVWXYZ"};
+  for (int r = 0; r < 3; ++r) {
+    const int y = 266 + r * 72;
+    const int count = strlen(rows[r]);
+    for (int i = 0; i < count; ++i) {
+      const int x = 18 + i * 56;
+      M5.Display.drawRoundRect(x, y, 48, 58, 7, TFT_BLACK);
+      char key[2] = {rows[r][i], 0};
+      textCenter(key, x + 24, y + 18, 2);
+    }
+  }
+  const char* controls[] = {"SPACE", "BACK", "CLEAR", "SAVE"};
+  for (int i = 0; i < 4; ++i) {
+    const int x = 18 + i * 126;
+    M5.Display.drawRoundRect(x, 492, 114, 58, 7, TFT_BLACK);
+    textCenter(controls[i], x + 57, 512, 1);
+  }
+  M5.Display.setCursor(20, 580);
+  M5.Display.setTextSize(1);
+  M5.Display.print("Saved notes are stored in /OS/Notes on the microSD card.");
+}
+
+void NotesApp::onTick(AppContext& context, uint32_t) {
+  const auto& touch = M5.Touch.getDetail();
+  if (!touch.wasPressed()) return;
+  if (touch.x < 95 && touch.y < 68 && navigator_) { navigator_(AppId::Launcher); return; }
+  if (touch.y >= 266 && touch.y < 482) {
+    const int row = (touch.y - 266) / 72;
+    const int column = (touch.x - 18) / 56;
+    const char* rows[] = {"ABCDEFGHI", "JKLMNOPQR", "STUVWXYZ"};
+    if (row >= 0 && row < 3 && column >= 0 && column < static_cast<int>(strlen(rows[row]))) append(rows[row][column]);
+  } else if (touch.y >= 492 && touch.y < 550) {
+    const int control = (touch.x - 18) / 126;
+    if (control == 0) append(' ');
+    else if (control == 1 && !text_.isEmpty()) text_.remove(text_.length() - 1);
+    else if (control == 2) text_ = "";
+    else if (control == 3) save(context);
+  }
+  draw(context);
+}
