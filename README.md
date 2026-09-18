@@ -429,6 +429,4 @@ PaperOS is a unified implementation, but its apps were informed by these project
 
 See [source provenance and retained notices](docs/THIRD_PARTY.md) and the app `PORTING.md` files for detail. The standalone clones were removed; no `third_party` folder is needed to build. Third-party copyrights remain with their owners.
 
-PaperOS is released under the root [MIT License](LICENSE), copyright © 2026 Saurav Singh. There is only one file named `LICENSE` in the repository; required third-party asset attribution is retained in the provenance document.
-
-Screenshot placeholders above can be replaced with actual device photos. More detail: [architecture](docs/ARCHITECTURE.md), [UI consistency](docs/UI_CONSISTENCY.md), [quality audit](docs/QUALITY_AUDIT.md), [PDF guide](docs/PDF_READER.md), [flashcard schema](docs/FLASHCARDS.md).
+PaperOS is released under the root [MIT License](LICENSE), copyright © 2026 Saurav Singh.
